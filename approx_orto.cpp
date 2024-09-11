@@ -1,67 +1,61 @@
-#include <iostream>
+п»ї#include <iostream>
 #include <vector>
 #include <cmath>
 #include <iomanip>
 
 #include "approx_orto.h"
-// Типы для удобства
+// РўРёРїС‹ РґР»СЏ СѓРґРѕР±СЃС‚РІР°
 
 
-// Функция для скалярного произведения двух векторов с использованием Eigen
+// Р¤СѓРЅРєС†РёСЏ РґР»СЏ СЃРєР°Р»СЏСЂРЅРѕРіРѕ РїСЂРѕРёР·РІРµРґРµРЅРёСЏ РґРІСѓС… РІРµРєС‚РѕСЂРѕРІ СЃ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРµРј Eigen
 inline double dot_product(const Vector& v1, const Vector& v2) {
-    return v1.dot(v2);  // Оптимизированное скалярное произведение из Eigen
+    if (v1.size() != v2.size()) {
+        throw std::invalid_argument("Vectors must have the same size for dot product.");
+    }
+    return v1.dot(v2);  // РћРїС‚РёРјРёР·РёСЂРѕРІР°РЅРЅРѕРµ СЃРєР°Р»СЏСЂРЅРѕРµ РїСЂРѕРёР·РІРµРґРµРЅРёРµ РёР· Eigen
 }
 
-// Функция для ортогонализации системы векторов по методу Грама-Шмидта с использованием Eigen
+// Р¤СѓРЅРєС†РёСЏ РґР»СЏ РѕСЂС‚РѕРіРѕРЅР°Р»РёР·Р°С†РёРё СЃРёСЃС‚РµРјС‹ РІРµРєС‚РѕСЂРѕРІ РїРѕ РјРµС‚РѕРґСѓ Р“СЂР°РјР°-РЁРјРёРґС‚Р° СЃ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРµРј Eigen
 Matrix gram_schmidt(const Matrix& vectors) {
     size_t n = vectors.rows();
-    Matrix orthogonal_vectors(vectors.rows(), vectors.cols());
+    size_t m = vectors.cols();
+
+    if (n == 0 || m == 0) {
+        throw std::invalid_argument("Matrix must have at least one row and one column.");
+    }
+
+    Matrix orthogonal_vectors(n, m);
     orthogonal_vectors.setZero();
 
+    // Р’РµРєС‚РѕСЂ РґР»СЏ РІСЂРµРјРµРЅРЅРѕРіРѕ С…СЂР°РЅРµРЅРёСЏ РїСЂРѕРјРµР¶СѓС‚РѕС‡РЅС‹С… СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ
+    Vector new_vector(m);
+
     for (size_t i = 0; i < n; ++i) {
-        Vector new_vector = vectors.row(i);
+        new_vector = vectors.row(i);  // РР·Р±РµРіР°РµРј РєРѕРїРёСЂРѕРІР°РЅРёСЏ, РёСЃРїРѕР»СЊР·СѓРµРј РїСЂСЏРјРѕР№ РґРѕСЃС‚СѓРї Рє СЃС‚СЂРѕРєР°Рј
 
         if (i == 0) {
             orthogonal_vectors.row(0) = new_vector;
         }
         else {
             for (size_t j = 0; j < i; ++j) {
-                double scale = dot_product(new_vector, orthogonal_vectors.row(j)) / dot_product(orthogonal_vectors.row(j), orthogonal_vectors.row(j));
-                new_vector -= scale * orthogonal_vectors.row(j);
+                // РћРїС‚РёРјРёР·Р°С†РёСЏ: РёСЃРїРѕР»СЊР·СѓРµРј Eigen РґР»СЏ СЌС„С„РµРєС‚РёРІРЅРѕРіРѕ РІС‹С‡РёСЃР»РµРЅРёСЏ СЃРєР°Р»СЏСЂРЅС‹С… РїСЂРѕРёР·РІРµРґРµРЅРёР№ Рё РїСЂРµРґРѕС‚РІСЂР°С‰Р°РµРј СЃРѕР·РґР°РЅРёРµ РІСЂРµРјРµРЅРЅС‹С… РѕР±СЉРµРєС‚РѕРІ
+                double denom = orthogonal_vectors.row(j).squaredNorm();  // Р’РµРєС‚РѕСЂРЅР°СЏ РЅРѕСЂРјР° РІРјРµСЃС‚Рѕ СЏРІРЅРѕРіРѕ dot_product
+                if (denom == 0) {
+                    throw std::invalid_argument("Zero vector encountered during orthogonalization.");
+                }
+
+                double scale = new_vector.dot(orthogonal_vectors.row(j)) / denom;
+
+                // РСЃРїРѕР»СЊР·СѓРµРј noalias() РґР»СЏ РїСЂРµРґРѕС‚РІСЂР°С‰РµРЅРёСЏ РІСЂРµРјРµРЅРЅС‹С… РѕР±СЉРµРєС‚РѕРІ
+                new_vector.noalias() -= scale * orthogonal_vectors.row(j);
             }
             orthogonal_vectors.row(i) = new_vector;
         }
-
-        // Отладочная печать
-        //std::cout << "Ортогонализованный вектор " << i << ": " << new_vector.transpose() << std::endl;
     }
+
     return orthogonal_vectors;
 }
 
-// Функция для разложения вектора по ортогональному базису с использованием Eigen
-Vector decompose_vector(const Vector& v, const Matrix& orthogonal_basis) {
-    Vector coefficients(orthogonal_basis.rows());
-
-    for (size_t i = 0; i < orthogonal_basis.rows(); ++i) {
-        double denominator = dot_product(orthogonal_basis.row(i), orthogonal_basis.row(i));
-        coefficients[i] = (denominator != 0) ? dot_product(v, orthogonal_basis.row(i)) / denominator : 0;
-
-        // Отладочная печать
-        //std::cout << "Коэффициент " << i << ": " << coefficients[i] << std::endl;
-    }
-
-    return coefficients;
-}
-
-// Вычисление l_k_i для конкретных индексов k и i
-inline double compute_l_k_i(const Vector& f_k_i, const Vector& e_i) {
-    double dot_product_fk_ei = dot_product(f_k_i, e_i);
-    double dot_product_ei_ei = dot_product(e_i, e_i);
-
-    return (dot_product_ei_ei == 0) ? 0 : -dot_product_fk_ei / dot_product_ei_ei;
-}
-
-// Итеративная версия функции F(j, i)
 Matrix compute_F_matrix(const Matrix& l) {
     size_t n = l.rows();
     Matrix F_matrix = Matrix::Zero(n, n);
@@ -76,22 +70,29 @@ Matrix compute_F_matrix(const Matrix& l) {
         }
     }
 
-    // Отладочная печать
-    //std::cout << "Матрица F:\n" << F_matrix << std::endl;
+    
 
     return F_matrix;
 }
-
-// Вычисление bi
+// Р’С‹С‡РёСЃР»РµРЅРёРµ bi СЃ РїСЂРѕРІРµСЂРєРѕР№ РЅР° СЂР°Р·РјРµСЂС‹
 Vector compute_bi(size_t k, const Vector& a_k, const Matrix& l) {
+    if (k >= a_k.size()) {
+        throw std::invalid_argument("Index k is out of bounds for vector a_k.");
+    }
+
     Vector b = Vector::Zero(a_k.size());
     Matrix F_matrix = compute_F_matrix(l);
 
-    b[k] = a_k[k];
-    b[k - 1] = a_k[k - 1] + a_k[k] * F_matrix(k, k - 1);
-    b[k - 2] = a_k[k - 2] + a_k[k - 1] * F_matrix(k - 1, k - 2) + a_k[k] * F_matrix(k, k - 2);
+    if (k >= 1) {
+        b[k] = a_k[k];
+        b[k - 1] = a_k[k - 1] + a_k[k] * F_matrix(k, k - 1);
+    }
 
-    for (int i = k - 3; i >= 0; --i) {
+    if (k >= 2) {
+        b[k - 2] = a_k[k - 2] + a_k[k - 1] * F_matrix(k - 1, k - 2) + a_k[k] * F_matrix(k, k - 2);
+    }
+
+    for (int i = static_cast<int>(k) - 3; i >= 0; --i) {
         double sum_part = 0;
         for (size_t j = i + 1; j <= k; ++j) {
             sum_part += a_k[j] * F_matrix(j, i);
@@ -99,55 +100,72 @@ Vector compute_bi(size_t k, const Vector& a_k, const Matrix& l) {
         b[i] = a_k[i] + sum_part;
     }
 
-    // Отладочная печать
-    //std::cout << "Вектор b: " << b.transpose() << std::endl;
-
     return b;
 }
 
-// Основная функция для аппроксимации вектора x в базисе f_k с использованием Eigen и добавленной отладочной печати
+Vector decompose_vector(const Vector& v, const Matrix& orthogonal_basis) {
+    Vector coefficients(orthogonal_basis.rows());
+
+    for (size_t i = 0; i < orthogonal_basis.rows(); ++i) {
+        double denominator = dot_product(orthogonal_basis.row(i), orthogonal_basis.row(i));
+        coefficients[i] = (denominator != 0) ? dot_product(v, orthogonal_basis.row(i)) / denominator : 0;
+
+        // ГЋГІГ«Г Г¤Г®Г·Г­Г Гї ГЇГҐГ·Г ГІГј
+        //std::cout << "ГЉГ®ГЅГґГґГЁГ¶ГЁГҐГ­ГІ " << i << ": " << coefficients[i] << std::endl;
+    }
+
+    return coefficients;
+}
+
+inline double compute_l_k_i(const Vector& f_k_i, const Vector& e_i) {
+    double dot_product_fk_ei = dot_product(f_k_i, e_i);
+    double dot_product_ei_ei = dot_product(e_i, e_i);
+
+    return (dot_product_ei_ei == 0) ? 0 : -dot_product_fk_ei / dot_product_ei_ei;
+}
+
+// РћСЃРЅРѕРІРЅР°СЏ С„СѓРЅРєС†РёСЏ РґР»СЏ Р°РїРїСЂРѕРєСЃРёРјР°С†РёРё РІРµРєС‚РѕСЂР° x РІ Р±Р°Р·РёСЃРµ f_k СЃ РѕР±СЂР°Р±РѕС‚РєРѕР№ РјР°Р»С‹С… РґР°РЅРЅС‹С…
 Vector approximate_with_non_orthogonal_basis_orto(const Vector& x, const Matrix& f_k) {
-    //std::cout << "Аппроксимация вектора: " << x.transpose() << std::endl;
+    if (x.size() == 0 || f_k.rows() == 0 || f_k.cols() == 0) {
+        throw std::invalid_argument("Input vector and basis matrix must not be empty.");
+    }
 
-    if (x.size() < 3)
-        return {};
-
-    // Ортогонализация базиса
+    // РћСЂС‚РѕРіРѕРЅР°Р»РёР·Р°С†РёСЏ Р±Р°Р·РёСЃР°
     Matrix e_i = gram_schmidt(f_k);
 
-    // Разложение вектора x по ортогональному базису
+    // Р Р°Р·Р»РѕР¶РµРЅРёРµ РІРµРєС‚РѕСЂР° x РїРѕ РѕСЂС‚РѕРіРѕРЅР°Р»СЊРЅРѕРјСѓ Р±Р°Р·РёСЃСѓ
     Vector a_k = decompose_vector(x, e_i);
 
-    // Вычисление l_k_i
+    // Р’С‹С‡РёСЃР»РµРЅРёРµ l_k_i
     Matrix l_k_i(f_k.rows(), f_k.cols());
 
     for (size_t k = 0; k < f_k.rows(); ++k) {
         for (size_t i = 0; i < e_i.rows(); ++i) {
             l_k_i(k, i) = compute_l_k_i(f_k.row(k), e_i.row(i));
-
-            // Отладочная печать
-            //std::cout << "l_k_i[" << k << "][" << i << "] = " << l_k_i(k, i) << std::endl;
         }
     }
 
-    // Вычисление b_i
+    // Р’С‹С‡РёСЃР»РµРЅРёРµ b_i
     size_t k = a_k.size() - 1;
+    if (k < 2) {
+        throw std::invalid_argument("Basis is too small for the decomposition.");
+    }
+
     Vector b = compute_bi(k, a_k, l_k_i);
 
-    //std::cout << "Результирующий вектор b: " << b.transpose() << std::endl;
     return b;
 }
 
 
 
-// Функция-обертка для std::vector
+// Р¤СѓРЅРєС†РёСЏ-РѕР±РµСЂС‚РєР° РґР»СЏ std::vector
 std::vector<double> approximate_with_non_orthogonal_basis_orto_std(
     const std::vector<double>& vector, const std::vector<std::vector<double>>& basis) {
 
-    // Преобразуем std::vector<double> в Eigen::VectorXd
+    // РџСЂРµРѕР±СЂР°Р·СѓРµРј std::vector<double> РІ Eigen::VectorXd
     Vector x = Eigen::Map<const Vector>(vector.data(), vector.size());
 
-    // Преобразуем std::vector<std::vector<double>> в Eigen::MatrixXd
+    // РџСЂРµРѕР±СЂР°Р·СѓРµРј std::vector<std::vector<double>> РІ Eigen::MatrixXd
     size_t rows = basis.size();
     size_t cols = basis[0].size();
     Matrix f_k(rows, cols);
@@ -157,11 +175,17 @@ std::vector<double> approximate_with_non_orthogonal_basis_orto_std(
             f_k(i, j) = basis[i][j];
         }
     }
+    Vector result;
+    try {
+        result = approximate_with_non_orthogonal_basis_orto(x, f_k);
+    }
+    catch (std::invalid_argument e){
+        return {};
+    }
+    // Р’С‹Р·С‹РІР°РµРј РѕСЂРёРіРёРЅР°Р»СЊРЅСѓСЋ С„СѓРЅРєС†РёСЋ СЃ С‚РёРїР°РјРё Eigen
+    
 
-    // Вызываем оригинальную функцию с типами Eigen
-    Vector result = approximate_with_non_orthogonal_basis_orto(x, f_k);
-
-    // Преобразуем результат обратно в std::vector<double>
+    // РџСЂРµРѕР±СЂР°Р·СѓРµРј СЂРµР·СѓР»СЊС‚Р°С‚ РѕР±СЂР°С‚РЅРѕ РІ std::vector<double>
     std::vector<double> result_std(result.data(), result.data() + result.size());
 
     return result_std;

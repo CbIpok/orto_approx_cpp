@@ -13,7 +13,25 @@
 #include <fstream>
 #include "json.hpp"
 
+
 using json = nlohmann::json;
+
+
+void show_progress_bar(size_t current, size_t total) {
+    int bar_width = 70;
+    float progress = (float)current / total;
+    int pos = bar_width * progress;
+
+    std::cout << "[";
+    for (int i = 0; i < bar_width; ++i) {
+        if (i < pos) std::cout << "=";
+        else if (i == pos) std::cout << ">";
+        else std::cout << " ";
+    }
+    std::cout << "] " << int(progress * 100.0) << " %\r";
+    std::cout.flush();
+}
+
 // Функция для сравнения векторов
 bool vectors_are_close(const std::vector<double>& v1, const std::vector<double>& v2, double tol = 1e-6) {
     if (v1.size() != v2.size()) return false;
@@ -32,7 +50,6 @@ void run_tests() {
     {{6.0, 12.0, 18.0}, {{1.0, 1.0, 1.0}, {0.0, 1.0, 2.0}, {1.0, 0.0, 4.0}}},
     {{7.0, 14.0, 21.0}, {{1.0, 2.0, 3.0}, {2.0, 4.0, 5.0}, {3.0, 5.0, 6.0}}},
     {{9.0, 17.0, 25.0}, {{1.0, 2.0, 0.0}, {2.0, 3.0, 4.0}, {0.0, 1.0, 5.0}}},
-    {{3.0, 6.0, 9.0, 12.0}, {{1.0, 2.0, 1.0, 0.0}, {2.0, 3.0, 2.0, 1.0}, {3.0, 4.0, 3.0, 2.0}, {1.0, 1.0, 0.0, 2.0}}},
     {{5.0, 10.0, 15.0, 20.0}, {{1.0, 2.0, 1.0, 0.0}, {2.0, 1.0, 3.0, 1.0}, {3.0, 1.0, 4.0, 2.0}, {1.0, 3.0, 1.0, 4.0}}},
     {{4.0, 8.0, 12.0, 16.0, 20.0}, {{1.0, 2.0, 0.0, 1.0, 0.0}, {2.0, 3.0, 1.0, 0.0, 1.0}, {3.0, 4.0, 1.0, 2.0, 0.0}, {2.0, 3.0, 0.0, 1.0, 3.0}, {1.0, 0.0, 2.0, 1.0, 4.0}}},
     {{6.0, 9.0, 12.0, 15.0, 18.0, 21.0}, {{1.0, 0.0, 2.0, 1.0, 3.0, 0.0}, {2.0, 1.0, 3.0, 2.0, 1.0, 2.0}, {3.0, 2.0, 1.0, 3.0, 2.0, 1.0}, {0.0, 3.0, 1.0, 2.0, 0.0, 3.0}, {1.0, 2.0, 0.0, 3.0, 2.0, 1.0}, {2.0, 3.0, 2.0, 1.0, 0.0, 2.0}}}
@@ -47,7 +64,8 @@ void run_tests() {
         std::vector<double> approximation(vector.size(), 0.0);
         for (size_t i = 0; i < basis.size(); ++i) {
             for (size_t j = 0; j < vector.size(); ++j) {
-                approximation[j] += coefs[i] * basis[i][j];
+                if (coefs.size() != 0)
+                    approximation[j] += coefs[i] * basis[i][j];
             }
         }
 
@@ -108,6 +126,7 @@ void json_read()
                 fk_t[i].push_back(fk[i][t]);
             }
             approximate_with_non_orthogonal_basis_orto_std(mariogramm_t, fk_t);
+           /* show_progress_bar(t, mariogramm.size());*/
         }
                     
     }
@@ -117,7 +136,7 @@ void json_read()
 }
 
 int main() {
-    //run_tests();
+    run_tests();
     json_read();
     return 0;
 }

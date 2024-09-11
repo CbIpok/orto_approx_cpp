@@ -7,7 +7,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Добавляем поддержку pybind11
 include(FetchContent)
-
+# Добавляем флаги компиляции для релизной сборки
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native")
+endif()
 cmake_policy(SET CMP0148 NEW)
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 # Загружаем и устанавливаем pybind11
