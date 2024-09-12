@@ -1,192 +1,205 @@
 ﻿#include <iostream>
 #include <vector>
-#include <cmath>
-#include <iomanip>
-
+#include <Eigen/Dense>
+#include <future>
 #include "approx_orto.h"
-// Типы для удобства
 
 
-// Функция для скалярного произведения двух векторов с использованием Eigen
-inline double dot_product(const Vector& v1, const Vector& v2) {
-    if (v1.size() != v2.size()) {
-        throw std::invalid_argument("Vectors must have the same size for dot product.");
-    }
-    return v1.dot(v2);  // Оптимизированное скалярное произведение из Eigen
+// Использование Eigen для векторов и матриц
+using Vector = Eigen::VectorXd;
+using Matrix = Eigen::MatrixXd;
+
+// Преобразование std::vector<double> в Eigen::VectorXd
+Vector to_eigen_vector(const std::vector<double>& v) {
+    return Eigen::Map<const Vector>(v.data(), v.size());
 }
 
-// Функция для ортогонализации системы векторов по методу Грама-Шмидта с использованием Eigen
-Matrix gram_schmidt(const Matrix& vectors) {
-    size_t n = vectors.rows();
-    size_t m = vectors.cols();
+// Преобразование std::vector<std::vector<double>> в std::vector<Eigen::VectorXd>
+std::vector<Vector> to_eigen_basis(const std::vector<std::vector<double>>& basis) {
+    std::vector<Vector> eigen_basis;
+    eigen_basis.reserve(basis.size());
+    for (const auto& vec : basis) {
+        eigen_basis.emplace_back(to_eigen_vector(vec));
+    }
+    return eigen_basis;
+}
 
-    if (n == 0 || m == 0) {
-        throw std::invalid_argument("Matrix must have at least one row and one column.");
+std::vector<Vector> gram_schmidt_with_fixed_first_vector(const std::vector<Vector>& vectors) {
+    size_t num_vectors = vectors.size();
+    size_t vector_size = vectors[0].size();
+
+    std::vector<Vector> orthogonal_basis;
+    orthogonal_basis.reserve(num_vectors);  // Резервируем место для всех векторов
+
+    // Первый вектор остаётся неизменным
+    orthogonal_basis.push_back(vectors[0]);
+
+    // Используем временные буферы для проекций
+    for (size_t i = 1; i < num_vectors; ++i) {
+        Vector v = vectors[i];
+
+        for (size_t j = 0; j < orthogonal_basis.size(); ++j) {
+            const Vector& u = orthogonal_basis[j];
+
+            // Модифицированная версия Грам-Шмидта: вычитание проекции
+            double projection_scale = v.dot(u) / u.squaredNorm();
+            v -= projection_scale * u;
+        }
+
+        orthogonal_basis.push_back(v);
     }
 
-    Matrix orthogonal_vectors(n, m);
-    orthogonal_vectors.setZero();
+    return orthogonal_basis;
+}
 
-    // Вектор для временного хранения промежуточных результатов
-    Vector new_vector(m);
+// Функция для нахождения коэффициентов разложения в исходном базисе с использованием Eigen
+std::vector<double> find_coefficients_in_original_basis(
+    const std::vector<Vector>& basis,
+    const std::vector<Vector>& orthogonal_basis,
+    const Vector& f_bort
+) {
+    size_t n = basis.size();
 
+    // Создание матрицы перехода с использованием Eigen
+    Matrix transition_matrix(n, n);
     for (size_t i = 0; i < n; ++i) {
-        new_vector = vectors.row(i);  // Избегаем копирования, используем прямой доступ к строкам
-
-        if (i == 0) {
-            orthogonal_vectors.row(0) = new_vector;
-        }
-        else {
-            for (size_t j = 0; j < i; ++j) {
-                // Оптимизация: используем Eigen для эффективного вычисления скалярных произведений и предотвращаем создание временных объектов
-                double denom = orthogonal_vectors.row(j).squaredNorm();  // Векторная норма вместо явного dot_product
-                if (denom == 0) {
-                    throw std::invalid_argument("Zero vector encountered during orthogonalization.");
-                }
-
-                double scale = new_vector.dot(orthogonal_vectors.row(j)) / denom;
-
-                // Используем noalias() для предотвращения временных объектов
-                new_vector.noalias() -= scale * orthogonal_vectors.row(j);
-            }
-            orthogonal_vectors.row(i) = new_vector;
+        for (size_t j = 0; j < n; ++j) {
+            transition_matrix(i, j) = orthogonal_basis[j].dot(basis[i]);
         }
     }
 
-    return orthogonal_vectors;
-}
-
-Matrix compute_F_matrix(const Matrix& l) {
-    size_t n = l.rows();
-    Matrix F_matrix = Matrix::Zero(n, n);
-
+    // Нормирование f_bort по нормам ортогональных векторов
+    Vector f_bort_scaled = f_bort;
     for (size_t i = 0; i < n; ++i) {
-        for (size_t j = i + 1; j < n; ++j) {
-            double sum_part = 0;
-            for (size_t k = i + 1; k < j; ++k) {
-                sum_part += l(j, k) * F_matrix(k, i);
-            }
-            F_matrix(j, i) = l(j, i) + sum_part;
-        }
+        f_bort_scaled(i) *= orthogonal_basis[i].dot(orthogonal_basis[i]);
     }
 
-    
+    // Решение системы уравнений с использованием метода QR-разложения
+    Vector f_b = transition_matrix.transpose().colPivHouseholderQr().solve(f_bort_scaled);
 
-    return F_matrix;
-}
-// Вычисление bi с проверкой на размеры
-Vector compute_bi(size_t k, const Vector& a_k, const Matrix& l) {
-    if (k >= a_k.size()) {
-        throw std::invalid_argument("Index k is out of bounds for vector a_k.");
-    }
-
-    Vector b = Vector::Zero(a_k.size());
-    Matrix F_matrix = compute_F_matrix(l);
-
-    if (k >= 1) {
-        b[k] = a_k[k];
-        b[k - 1] = a_k[k - 1] + a_k[k] * F_matrix(k, k - 1);
-    }
-
-    if (k >= 2) {
-        b[k - 2] = a_k[k - 2] + a_k[k - 1] * F_matrix(k - 1, k - 2) + a_k[k] * F_matrix(k, k - 2);
-    }
-
-    for (int i = static_cast<int>(k) - 3; i >= 0; --i) {
-        double sum_part = 0;
-        for (size_t j = i + 1; j <= k; ++j) {
-            sum_part += a_k[j] * F_matrix(j, i);
-        }
-        b[i] = a_k[i] + sum_part;
-    }
-
-    return b;
+    // Преобразование результата в std::vector
+    return std::vector<double>(f_b.data(), f_b.data() + f_b.size());
 }
 
-Vector decompose_vector(const Vector& v, const Matrix& orthogonal_basis) {
-    Vector coefficients(orthogonal_basis.rows());
-
-    for (size_t i = 0; i < orthogonal_basis.rows(); ++i) {
-        double denominator = dot_product(orthogonal_basis.row(i), orthogonal_basis.row(i));
-        coefficients[i] = (denominator != 0) ? dot_product(v, orthogonal_basis.row(i)) / denominator : 0;
-
-        // Îòëàäî÷íàÿ ïå÷àòü
-        //std::cout << "Êîýôôèöèåíò " << i << ": " << coefficients[i] << std::endl;
+// Функция для разложения вектора по ортогональному базису
+Vector decompose_vector(const Vector& vector, const std::vector<Vector>& basis) {
+    Vector coefficients(basis.size());
+    for (size_t i = 0; i < basis.size(); ++i) {
+        coefficients(i) = vector.dot(basis[i]) / basis[i].dot(basis[i]);
     }
-
     return coefficients;
 }
-
-inline double compute_l_k_i(const Vector& f_k_i, const Vector& e_i) {
-    double dot_product_fk_ei = dot_product(f_k_i, e_i);
-    double dot_product_ei_ei = dot_product(e_i, e_i);
-
-    return (dot_product_ei_ei == 0) ? 0 : -dot_product_fk_ei / dot_product_ei_ei;
-}
-
-// Основная функция для аппроксимации вектора x в базисе f_k с обработкой малых данных
-Vector approximate_with_non_orthogonal_basis_orto(const Vector& x, const Matrix& f_k) {
-    if (x.size() == 0 || f_k.rows() == 0 || f_k.cols() == 0) {
-        throw std::invalid_argument("Input vector and basis matrix must not be empty.");
+// Функция для проверки линейной независимости векторов
+bool areVectorsLinearlyIndependent(const std::vector<std::vector<double>>& vectors) {
+    if (vectors.empty() || vectors[0].empty()) {
+        return false;
     }
 
-    // Ортогонализация базиса
-    Matrix e_i = gram_schmidt(f_k);
+    // Определяем размерность векторов
+    size_t rows = vectors.size();
+    size_t cols = vectors[0].size();
 
-    // Разложение вектора x по ортогональному базису
-    Vector a_k = decompose_vector(x, e_i);
-
-    // Вычисление l_k_i
-    Matrix l_k_i(f_k.rows(), f_k.cols());
-
-    for (size_t k = 0; k < f_k.rows(); ++k) {
-        for (size_t i = 0; i < e_i.rows(); ++i) {
-            l_k_i(k, i) = compute_l_k_i(f_k.row(k), e_i.row(i));
-        }
-    }
-
-    // Вычисление b_i
-    size_t k = a_k.size() - 1;
-    if (k < 2) {
-        throw std::invalid_argument("Basis is too small for the decomposition.");
-    }
-
-    Vector b = compute_bi(k, a_k, l_k_i);
-
-    return b;
-}
-
-
-
-// Функция-обертка для std::vector
-std::vector<double> approximate_with_non_orthogonal_basis_orto_std(
-    const std::vector<double>& vector, const std::vector<std::vector<double>>& basis) {
-
-    // Преобразуем std::vector<double> в Eigen::VectorXd
-    Vector x = Eigen::Map<const Vector>(vector.data(), vector.size());
-
-    // Преобразуем std::vector<std::vector<double>> в Eigen::MatrixXd
-    size_t rows = basis.size();
-    size_t cols = basis[0].size();
-    Matrix f_k(rows, cols);
+    // Создаем матрицу из векторов
+    Eigen::MatrixXd matrix(rows, cols);
 
     for (size_t i = 0; i < rows; ++i) {
         for (size_t j = 0; j < cols; ++j) {
-            f_k(i, j) = basis[i][j];
+            matrix(i, j) = vectors[i][j];
         }
     }
-    Vector result;
+
+    // Вычисляем ранг матрицы
+    Eigen::FullPivLU<Eigen::MatrixXd> lu(matrix);
+    int rank = lu.rank();
+
+    // Если ранг матрицы равен числу векторов, они линейно независимы
+    return rank == std::min(rows, cols);
+}
+// Функция для аппроксимации вектора в исходном базисе, возвращающая только коэффициенты
+std::vector<double> approximate_with_non_orthogonal_basis_orto_std(
+    const std::vector<double>& vector, const std::vector<std::vector<double>>& basis
+) {
+   
+    // Преобразуем входные данные в контейнеры Eigen
+    Vector eigen_vector = to_eigen_vector(vector);
+    std::vector<Vector> eigen_basis = to_eigen_basis(basis);
+
+    // Ортогонализуем базис
+    std::vector<Vector> orthogonal_basis = gram_schmidt_with_fixed_first_vector(eigen_basis);
+
+    // Разлагаем вектор по ортогональному базису
+    Vector f_bort = decompose_vector(eigen_vector, orthogonal_basis);
+
+    // Находим коэффициенты в исходном базисе
+    std::vector<double> coefs;
     try {
-        result = approximate_with_non_orthogonal_basis_orto(x, f_k);
+        coefs = find_coefficients_in_original_basis(eigen_basis, orthogonal_basis, f_bort);
     }
-    catch (std::invalid_argument e){
+    catch (const std::runtime_error& e) {
         return {};
     }
-    // Вызываем оригинальную функцию с типами Eigen
-    
+    return coefs;
+}
 
-    // Преобразуем результат обратно в std::vector<double>
-    std::vector<double> result_std(result.data(), result.data() + result.size());
+std::vector<std::vector<double>> process_range(
+    const std::vector<double>& vector,
+    const std::vector<std::vector<double>>& basis,
+    size_t start, size_t end) {
 
-    return result_std;
+    std::vector<std::vector<double>> local_coofs;
+    std::vector<double> mariogramm_t(start);
+    std::vector<std::vector<double>> fk_t(basis.size());
+    std::copy_n(vector.begin(), start, mariogramm_t.begin());
+    for (size_t i = 0; i < basis.size(); i++) {
+        fk_t[i].resize(start);
+        std::copy_n(basis[i].begin(), start, fk_t[i].begin());
+    }
+
+    for (size_t t = start; t < end; ++t) {
+        mariogramm_t.push_back(vector[t]);
+        for (size_t i = 0; i < basis.size(); i++) {
+            fk_t[i].push_back(basis[i][t]);
+        }
+        local_coofs.push_back(approximate_with_non_orthogonal_basis_orto_std(mariogramm_t, fk_t));
+    }
+
+    return local_coofs;
+}
+
+std::vector<std::vector<double>> approximate_with_non_orthogonal_basis_orto_std_t(
+    const std::vector<double>& vector, const std::vector<std::vector<double>>& basis
+)
+{
+    const size_t num_tasks = 64; // Количество задач
+    size_t chunk_size = vector.size() / num_tasks; // Размер блока для каждой задачи
+
+    std::vector<std::future<std::vector<std::vector<double>>>> futures;
+    std::vector<std::vector<double>> coofs; // Результирующий вектор
+    std::mutex coofs_mutex; // Мьютекс для синхронизации доступа к результату
+
+    // Запускаем 64 задачи
+    for (size_t task = 0; task < num_tasks; ++task) {
+        size_t start = task * chunk_size;
+        size_t end = (task == num_tasks - 1) ? vector.size() : (task + 1) * chunk_size;
+
+        // Создаём асинхронную задачу
+        futures.push_back(std::async(std::launch::async, [start, end, &vector, &basis]() {
+            return process_range(vector, basis, start, end);
+            }));
+    }
+
+    // Ожидание результатов от всех задач и объединение результатов
+    for (auto& future : futures) {
+        try {
+            auto result = future.get();
+            // Объединение результатов (защищено мьютексом)
+            std::lock_guard<std::mutex> guard(coofs_mutex);
+            coofs.insert(coofs.end(), result.begin(), result.end());
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Ошибка при выполнении задачи: " << e.what() << std::endl;
+        }
+    }
+
+    return coofs;
 }

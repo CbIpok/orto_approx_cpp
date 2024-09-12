@@ -16,4 +16,8 @@ PYBIND11_MODULE(approx_orto, m) {
     m.def("approximate_with_non_orthogonal_basis_orto", &approximate_with_non_orthogonal_basis_orto_std,
         "Approximate a vector using a non-orthogonal basis",
         pybind11::arg("vector"), pybind11::arg("basis"));
+
+    m.def("approximate_with_non_orthogonal_basis_orto_t", &approximate_with_non_orthogonal_basis_orto_std_t,
+        "Approximate a vector using a non-orthogonal basis(t)",
+        pybind11::arg("vector"), pybind11::arg("basis"));
 }

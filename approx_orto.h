@@ -13,3 +13,7 @@ Vector approximate_with_non_orthogonal_basis_orto(const Vector& x, const Matrix&
 
 std::vector<double> approximate_with_non_orthogonal_basis_orto_std(
     const std::vector<double>& vector, const std::vector<std::vector<double>>& basis);
+
+std::vector<std::vector<double>> approximate_with_non_orthogonal_basis_orto_std_t(
+    const std::vector<double>& vector, const std::vector<std::vector<double>>& basis
+);

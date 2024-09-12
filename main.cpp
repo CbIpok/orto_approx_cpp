@@ -103,7 +103,15 @@ void read_json_data(const std::string& file_path, std::vector<double>& mariogram
     file.close();
 }
 
-
+void printVectorOfVectors(const std::vector<std::vector<double>>& vec) {
+    for (size_t i = 0; i < vec.size(); ++i) {
+        std::cout << "Row " << i + 1 << ": ";
+        for (size_t j = 0; j < vec[i].size(); ++j) {
+            std::cout << vec[i][j] << " ";  // Выводим каждый элемент в строке
+        }
+        std::cout << std::endl;  // Переход на новую строку после вывода одной строки
+    }
+}
 void json_read()
 {
     // Переменные для хранения данных
@@ -117,18 +125,19 @@ void json_read()
         // Чтение данных из JSON-файла
         read_json_data(file_path, mariogramm, fk);
         //std::vector<double> coefs = approximate_with_non_orthogonal_basis_orto_std(mariogramm, fk);
-        std::vector<double> mariogramm_t;
-        std::vector<std::vector<double>> fk_t(fk.size());
-        for (size_t t = 0; t < mariogramm.size(); ++t) {
-            mariogramm_t.push_back(mariogramm[t]);
-            for (size_t i = 0; i < fk.size(); i++)
-            {
-                fk_t[i].push_back(fk[i][t]);
-            }
-            approximate_with_non_orthogonal_basis_orto_std(mariogramm_t, fk_t);
-           /* show_progress_bar(t, mariogramm.size());*/
-        }
-                    
+        //std::vector<double> mariogramm_t;
+        //std::vector<std::vector<double>> fk_t(fk.size());
+        //for (size_t t = 0; t < mariogramm.size(); ++t) {
+        //    mariogramm_t.push_back(mariogramm[t]);
+        //    for (size_t i = 0; i < fk.size(); i++)
+        //    {
+        //        fk_t[i].push_back(fk[i][t]);
+        //    }
+        //    approximate_with_non_orthogonal_basis_orto_std(mariogramm_t, fk_t);
+        //   /* show_progress_bar(t, mariogramm.size());*/
+        //}
+        auto coefs = approximate_with_non_orthogonal_basis_orto_std_t(mariogramm, fk);
+        printVectorOfVectors(coefs);
     }
     catch (const std::exception& e) {
         std::cerr << "Ошибка: " << e.what() << std::endl;
